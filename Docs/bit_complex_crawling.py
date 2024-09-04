@@ -1,12 +1,32 @@
+
 import requests 
 from bs4 import BeautifulSoup
+
+from time import time 
+import os
+import pickle 
 
 def crawl_press_names_and_codes():
     """Make the dict that have press code as key, and press name as value. Crawl from https://media.naver.com/channel/settings. 
     """
+
+    begin = time()
     url = 'https://media.naver.com/channel/settings'
     code2name = {}
     
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        for li in soup.find_all('li', {'class': 'ca_item _channel_item'}):
+            press_name = li.find('div', {'class': 'ca_name'}).text
+            press_code = li['data-office']
+            code2name[press_code] = press_name 
+
+            # print(press_code, press_name)
+    end = time()
+    print(end - begin)
     return code2name 
 
 def crawl_journalist_info_pages(code2name):
@@ -15,9 +35,31 @@ def crawl_journalist_info_pages(code2name):
     For now, you DO NOT have to crawl all journalists; for now, it's impossible. 
     Crawl from https://media.naver.com/journalists/. 
     """
-
+    begin = time()
     res = {}
     
+    for press_code, press_name in code2name.items():
+        url = f'https://media.naver.com/journalists/whole?officeId={press_code}'
+
+        response = requests.get(url)
+
+        journalist_list = []
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            for li in soup.find_all('li', {'class' : 'journalist_list_content_item'}):
+                info = li.find('div', {'class' : 'journalist_list_content_title'})
+                a = info.find('a')
+                journalist_name = a.text.strip(' ������')
+                journalist_link = a['href']
+                journalist_list.append((journalist_name, journalist_link))
+
+        res[press_code] = (press_name, journalist_list)
+    
+    end = time()
+
+    print(end - begin)
     return res 
 
 class Journalist:
@@ -47,12 +89,26 @@ def crawl_journalist_info(link):
 
 
 if __name__ == '__main__':
-    code2name = crawl_press_names_and_codes()
-    code2info = crawl_journalist_info_pages(code2name)
-    for code, (press_name, journalist_list) in code2info.items():
-        for journalist_name, link in journalist_list:
-            j = crawl_journalist_info(link)
-            assert j.name = journalist_name
+    code2info_pickle = 'code2info.pickle'
 
+    if code2info_pickle in os.listdir():
+        begin = time()
+        code2info = pickle.load(open(code2info_pickle, 'rb'))    
+        end = time()
+        print(f'{end - begin} sec passed for unpickling')
+    else:
+        begin = time()
+        code2name = crawl_press_names_and_codes()
+        code2info = crawl_journalist_info_pages(code2name)
+        pickle.dump(code2info, open(code2info_pickle, 'wb+'))
+        end = time()
+        print(f'{end - begin} sec passed for execution and pickling')
+
+    # for code, (press_name, journalist_list) in code2info.items():
+    #     for journalist_name, link in journalist_list:
+    #         j = crawl_journalist_info(link)
+    #         assert j.name = journalist_name
+
+    
     
     
